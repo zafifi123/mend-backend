@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from app.core.database import get_db_connection
+from api.core.db import get_conn
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -27,7 +27,7 @@ async def get_recommendations(limit: Optional[int] = 5):
     """Get the latest trading recommendations."""
     
     try:
-        with get_db_connection() as conn:
+        with get_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Get the latest recommendations
                 query = """
@@ -70,7 +70,7 @@ async def get_recommendations_by_symbol(symbol: str, limit: Optional[int] = 3):
     """Get recommendations for a specific symbol."""
     
     try:
-        with get_db_connection() as conn:
+        with get_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 query = """
                 SELECT 
@@ -116,7 +116,7 @@ async def get_recommendation_stats():
     """Get statistics about recommendations."""
     
     try:
-        with get_db_connection() as conn:
+        with get_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Get overall stats
                 stats_query = """
