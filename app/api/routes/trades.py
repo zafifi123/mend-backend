@@ -2,29 +2,32 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.core.db import get_conn
 from api.models import TradeEnriched
 import yfinance as yf
+from psycopg2.extras import RealDictCursor
 
 router = APIRouter()
 
 def enrich_trade_with_yf(row):
-    symbol = row[2]
+    # trades table: id, user_id, symbol, action, price, quantity, status, executed_at, created_at
+    symbol = str(row["symbol"])
     ticker = yf.Ticker(symbol)
     info = ticker.info
-    price = info.get("regularMarketPrice", float(row[4]))
+    price = float(info.get("regularMarketPrice", float(row["price"])))
     change = info.get("regularMarketChangePercent", 0.0)
-    volume = info.get("volume", 0)
+    volume = int(info.get("volume", 0))
     marketCap = info.get("marketCap", "")
     sector = info.get("sector", "")
     name = info.get("shortName", symbol)
     change_str = f"{change:+.2f}%" if isinstance(change, float) else str(change)
     marketCap_str = f"{marketCap:,}" if isinstance(marketCap, int) else str(marketCap)
+    # Map and convert types for TradeEnriched
     return TradeEnriched(
         symbol=symbol,
-        action=row[3],
+        action=str(row["action"]),
         reason="",
-        price=price,
-        quantity=row[5],
-        status=row[6],
-        executed_at=row[7],
+        price=float(row["price"]),
+        quantity=int(row["quantity"]),
+        status=str(row["status"]),
+        executed_at=row["executed_at"].isoformat() if row["executed_at"] else None,
         name=name,
         change=change_str,
         volume=volume,
@@ -32,23 +35,23 @@ def enrich_trade_with_yf(row):
         sector=sector
     )
 
-@router.get("/history", response_model=list[TradeEnriched])
+@router.get("/", response_model=list[TradeEnriched])
 def get_trade_history(conn=Depends(get_conn)):
-    with conn.cursor() as cur:
-        cur.execute("SELECT * FROM trades WHERE status = 'Completed'")
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT * FROM trades")
         rows = cur.fetchall()
         return [enrich_trade_with_yf(row) for row in rows]
 
 @router.get("/active", response_model=list[TradeEnriched])
 def get_active_trades(conn=Depends(get_conn)):
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM trades WHERE status = 'Active'")
         rows = cur.fetchall()
         return [enrich_trade_with_yf(row) for row in rows]
 
 @router.get("/pending", response_model=list[TradeEnriched])
 def get_pending_orders(conn=Depends(get_conn)):
-    with conn.cursor() as cur:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM trades WHERE status = 'Pending'")
         rows = cur.fetchall()
         return [enrich_trade_with_yf(row) for row in rows]
