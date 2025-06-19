@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from data.fetchers.news_scraper import fetch_news_articles
+from api.data.fetchers.news_scraper import fetch_news_articles
 
 router = APIRouter()
 
