@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import trades, news
 from api.routes import watchlist, recommendations, insights, trending, suggestions, chat
+from api.routes import user
 
 app = FastAPI()
 
@@ -21,3 +22,4 @@ app.include_router(insights.router, prefix="/api/insights", tags=["insights"])
 app.include_router(trending.router, prefix="/api", tags=["trending", "movers"])
 app.include_router(suggestions.router, prefix="/api/trades", tags=["suggestions"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
+app.include_router(user.router, prefix="/api/user", tags=["user"])

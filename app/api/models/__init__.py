@@ -50,11 +50,12 @@ class ChatMessage(BaseModel):
     message: str
 
 class TradeEnriched(BaseModel):
+    id: int
     symbol: str
     action: str
     reason: str
     price: float
-    quantity: int
+    quantity: Optional[int]
     status: str
     executed_at: Optional[str]
     name: str
