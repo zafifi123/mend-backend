@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from api.core.db import get_conn
 from api.models import WatchlistItem
-import yfinance as yf
+from api.core.cache import get_tickers_info
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -14,11 +14,11 @@ def get_watchlist(conn=Depends(get_conn)):
     with conn.cursor() as cur:
         cur.execute("SELECT symbol FROM watchlist")
         rows = cur.fetchall()
+        symbols = [row[0] for row in rows]
+        tickers_info = get_tickers_info(symbols)
         items = []
-        for row in rows:
-            symbol = row[0]
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
+        for symbol in symbols:
+            info = tickers_info.get(symbol, {})
             price = info.get("regularMarketPrice", 0.0)
             change = info.get("regularMarketChangePercent", 0.0)
             volume = info.get("volume", 0)

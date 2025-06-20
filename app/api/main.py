@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import trades, news
 from api.routes import watchlist, recommendations, insights, trending, suggestions, chat
 from api.routes import user
+from api.routes import market
 
 app = FastAPI()
 
@@ -23,3 +24,5 @@ app.include_router(trending.router, prefix="/api", tags=["trending", "movers"])
 app.include_router(suggestions.router, prefix="/api/trades", tags=["suggestions"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(user.router, prefix="/api/user", tags=["user"])
+app.include_router(market.router, prefix="/api/market", tags=["market"])
+app.include_router(market.router, prefix="/api/financials", tags=["financials"])

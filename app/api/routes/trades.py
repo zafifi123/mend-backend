@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from api.core.db import get_conn
 from api.models import TradeEnriched
-import yfinance as yf
+from api.core.cache import get_tickers_info
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
 from typing import Optional, List
 
 router = APIRouter()
 
-def enrich_trade_with_yf(row):
+def enrich_trade(row, tickers_info):
     # trades table: id, user_id, symbol, action, price, quantity, status, executed_at, created_at
     symbol = str(row["symbol"])
-    ticker = yf.Ticker(symbol)
-    info = ticker.info
+    info = tickers_info.get(symbol, {})
     price = float(info.get("regularMarketPrice", float(row["price"])))
     change = info.get("regularMarketChangePercent", 0.0)
     volume = int(info.get("volume", 0))
@@ -44,21 +43,27 @@ def get_trades(conn=Depends(get_conn)):
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM trades WHERE user_id = %s", (user_id,))
         rows = cur.fetchall()
-        return [enrich_trade_with_yf(row) for row in rows]
+        symbols = list(set([row['symbol'] for row in rows]))
+        tickers_info = get_tickers_info(symbols)
+        return [enrich_trade(row, tickers_info) for row in rows]
 
 @router.get("/active", response_model=list[TradeEnriched])
 def get_active_trades(conn=Depends(get_conn)):
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM trades WHERE status = 'Active'")
         rows = cur.fetchall()
-        return [enrich_trade_with_yf(row) for row in rows]
+        symbols = list(set([row['symbol'] for row in rows]))
+        tickers_info = get_tickers_info(symbols)
+        return [enrich_trade(row, tickers_info) for row in rows]
 
 @router.get("/pending", response_model=list[TradeEnriched])
 def get_pending_orders(conn=Depends(get_conn)):
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM trades WHERE status = 'Pending'")
         rows = cur.fetchall()
-        return [enrich_trade_with_yf(row) for row in rows]
+        symbols = list(set([row['symbol'] for row in rows]))
+        tickers_info = get_tickers_info(symbols)
+        return [enrich_trade(row, tickers_info) for row in rows]
 
 from pydantic import BaseModel
 class TradeCreateRequest(BaseModel):

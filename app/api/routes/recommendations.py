@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from psycopg2.extras import RealDictCursor
 from api.core.db import get_conn
 from pydantic import BaseModel
+from api.models import AIRecommendation
+import yfinance as yf
 
 router = APIRouter()
 
@@ -57,4 +59,37 @@ async def accept_recommendation(req: AcceptRecommendationRequest, conn=Depends(g
         trade_id = cur.fetchone()["id"]
         conn.commit()
     return {"success": True, "trade_id": trade_id}
+
+RISK_ORDER = {"Low": 0, "Moderate": 1, "High": 2}
+
+@router.get("/ai", response_model=list[AIRecommendation])
+def get_ai_recommendations(conn=Depends(get_conn)):
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('''
+            SELECT * FROM recommendations r
+            WHERE NOT EXISTS (
+                SELECT 1 FROM trades t WHERE t.rec_id = r.id AND t.user_id = %s
+            )
+        ''', (123,))
+        recs = cur.fetchall()
+        # Sort by highest confidence, then lowest risk_level
+        def sort_key(rec):
+            # Normalize risk_level for sorting
+            risk = rec.get("risk_level") or rec.get("risk") or "Moderate"
+            return (-float(rec.get("confidence", 0)), RISK_ORDER.get(risk, 1))
+        recs_sorted = sorted(recs, key=sort_key)
+        top3 = recs_sorted[:3]
+        # Map to AIRecommendation
+        result = []
+        for rec in top3:
+            result.append(
+                AIRecommendation(
+                    symbol=rec["symbol"],
+                    action=rec.get("action", "Hold"),
+                    confidence=float(rec.get("confidence", 0)),
+                    risk_level=rec.get("risk_level") or rec.get("risk") or "Moderate",
+                    reasoning=rec.get("reasoning", "")
+                )
+            )
+        return result
 

@@ -1,6 +1,7 @@
 fastapi
 uvicorn
-yfinance
+yfinance==0.2.37
 requests
 beautifulsoup4
 pydantic
+psycopg2-binary==2.9.9

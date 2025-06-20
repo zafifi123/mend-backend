@@ -63,3 +63,34 @@ class TradeEnriched(BaseModel):
     volume: int
     marketCap: str
     sector: str
+
+class MarketOverview(BaseModel):
+    index: str
+    value: float
+    change: float
+    changePercent: float
+
+class MarketMover(BaseModel):
+    symbol: str
+    name: str
+    price: float
+    change: float
+    changePercent: float
+    volume: int
+
+class UserStats(BaseModel):
+    portfolio_value: float
+    portfolio_change: float
+    portfolio_change_percent: float
+    active_positions: int
+    unique_symbols: int
+    win_rate: float  # 0-1
+    risk_score: float
+    risk_level: str
+
+class AIRecommendation(BaseModel):
+    symbol: str
+    action: str  # 'Buy' | 'Sell' | 'Hold'
+    confidence: float  # 0-1
+    risk_level: str
+    reasoning: str
