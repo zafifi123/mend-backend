@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-yfinance==0.2.37
+alpha_vantage
 requests
 beautifulsoup4
 pydantic

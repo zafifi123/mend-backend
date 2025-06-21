@@ -5,9 +5,24 @@ from psycopg2.extras import RealDictCursor
 from api.core.db import get_conn
 from pydantic import BaseModel
 from api.models import AIRecommendation
-import yfinance as yf
 
 router = APIRouter()
+
+class RecommendationHistoryItem(BaseModel):
+    id: int
+    symbol: str
+    action: str
+    confidence: float
+    reasoning: str
+    risk_level: str
+    timeframe: str
+    price_target: Optional[float]
+    stop_loss: Optional[float]
+    ml_confidence: float
+    llama_confidence: float
+    consensus_score: float
+    created_at: datetime
+    status: str # From the trades table
 
 class RecommendationResponse(BaseModel):
     id: int
@@ -17,8 +32,8 @@ class RecommendationResponse(BaseModel):
     reasoning: str
     risk_level: str
     timeframe: str
-    price_target: float
-    stop_loss: float
+    price_target: Optional[float]
+    stop_loss: Optional[float]
     ml_confidence: float
     llama_confidence: float
     consensus_score: float
@@ -38,6 +53,22 @@ async def get_recommendations(conn=Depends(get_conn)):
         items = [RecommendationResponse(**rec) for rec in recommendations]
         return items
 
+@router.get("/history", response_model=List[RecommendationHistoryItem])
+async def get_recommendations_history(conn=Depends(get_conn)):
+    """
+    Get all past recommendations that have been actioned (accepted or rejected).
+    """
+    user_id = 123
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('''
+            SELECT r.*, t.status
+            FROM recommendations r
+            JOIN trades t ON r.id = t.rec_id
+            WHERE t.user_id = %s
+        ''', (user_id,))
+        history_items = cur.fetchall()
+        return [RecommendationHistoryItem(**item) for item in history_items]
+
 class AcceptRecommendationRequest(BaseModel):
     rec_id: int
     user_id: int = 123
@@ -55,6 +86,33 @@ async def accept_recommendation(req: AcceptRecommendationRequest, conn=Depends(g
         cur.execute(
             "INSERT INTO trades (user_id, symbol, action, price, status, rec_id, quantity) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (req.user_id, rec["symbol"], rec["action"], rec["price_target"], 'pending_allocation', req.rec_id, None)
+        )
+        trade_id = cur.fetchone()["id"]
+        conn.commit()
+    return {"success": True, "trade_id": trade_id}
+
+class RejectRecommendationRequest(BaseModel):
+    rec_id: int
+    user_id: int = 123
+
+@router.post("/reject", response_model=dict)
+async def reject_recommendation(req: RejectRecommendationRequest, conn=Depends(get_conn)):
+    """Reject a recommendation by inserting a trade with status 'rejected' for user 123."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        # Get recommendation details
+        cur.execute("SELECT * FROM recommendations WHERE id = %s", (req.rec_id,))
+        rec = cur.fetchone()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+
+        # For a rejected action, the price is not relevant.
+        # Use the recommendation's price_target if it exists, otherwise default to 0.0
+        price_to_insert = rec.get("price_target") or 0.0
+
+        # Insert trade with status 'rejected'
+        cur.execute(
+            "INSERT INTO trades (user_id, symbol, action, price, status, rec_id, quantity) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (req.user_id, rec.get("symbol"), rec.get("action"), price_to_insert, 'rejected', req.rec_id, None)
         )
         trade_id = cur.fetchone()["id"]
         conn.commit()

@@ -65,6 +65,22 @@ def get_pending_orders(conn=Depends(get_conn)):
         tickers_info = get_tickers_info(symbols)
         return [enrich_trade(row, tickers_info) for row in rows]
 
+@router.get("/history", response_model=list[TradeEnriched])
+def get_trade_history(conn=Depends(get_conn)):
+    user_id = 123
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        # Fetches trades that are not currently active or pending
+        cur.execute(
+            "SELECT * FROM trades WHERE user_id = %s AND status NOT IN ('active', 'pending_allocation')",
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        if not rows:
+            return []
+        symbols = list(set([row['symbol'] for row in rows]))
+        tickers_info = get_tickers_info(symbols)
+        return [enrich_trade(row, tickers_info) for row in rows]
+
 from pydantic import BaseModel
 class TradeCreateRequest(BaseModel):
     rec_id: int

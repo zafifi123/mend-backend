@@ -3,8 +3,9 @@ from api.models import MarketOverview, MarketMover
 import requests
 from bs4 import BeautifulSoup
 from api.core.cache import get_tickers_info
-import yfinance as yf
 from datetime import datetime, timedelta
+from api.core.config import ALPHA_VANTAGE_API_KEY, ALPHA_VANTAGE_BASE_URL
+import os
 
 router = APIRouter()
 
@@ -14,39 +15,83 @@ def get_financials(symbol: str):
 
 @router.get("/performance/{symbol}")
 def get_performance(symbol: str):
-    ticker = yf.Ticker(symbol)
-    today = datetime.now()
-    periods = {
-        "3M": today - timedelta(days=90),
-        "6M": today - timedelta(days=180),
-        "1Y": today - timedelta(days=365)
+    """
+    Get performance data for different time periods using Alpha Vantage
+    """
+    params = {
+        'function': 'TIME_SERIES_DAILY',
+        'symbol': symbol,
+        'apikey': ALPHA_VANTAGE_API_KEY,
+        'outputsize': 'full'  # Get full data for historical calculations
     }
     
-    performance = {}
-    
     try:
-        hist = ticker.history(period="1y")
-        if hist.empty:
+        response = requests.get(ALPHA_VANTAGE_BASE_URL, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract time series data
+        time_series_key = None
+        for key in data.keys():
+            if 'Time Series' in key:
+                time_series_key = key
+                break
+        
+        if not time_series_key or time_series_key not in data:
             return {"error": "Could not retrieve historical data."}
-
-        current_price = hist['Close'].iloc[-1]
-
+        
+        time_series = data[time_series_key]
+        
+        # Convert to sorted list of (date, close_price) tuples
+        price_data = []
+        for date, values in time_series.items():
+            try:
+                close_price = float(values.get('4. close', 0))
+                price_data.append((date, close_price))
+            except (ValueError, TypeError):
+                continue
+        
+        if not price_data:
+            return {"error": "No valid price data found."}
+        
+        # Sort by date (newest first)
+        price_data.sort(key=lambda x: x[0], reverse=True)
+        
+        # Get current price (most recent)
+        current_price = price_data[0][1]
+        
+        # Calculate performance for different periods
+        performance = {}
+        today = datetime.now()
+        
+        periods = {
+            "3M": today - timedelta(days=90),
+            "6M": today - timedelta(days=180),
+            "1Y": today - timedelta(days=365)
+        }
+        
         for period, start_date in periods.items():
             # Find the closest available date in history
-            past_date = hist.index[hist.index.searchsorted(start_date, side='right') -1]
-            past_price = hist.loc[past_date]['Close']
+            target_date = start_date.strftime('%Y-%m-%d')
             
-            if past_price != 0:
+            # Find the closest date in our data
+            past_price = None
+            for date, price in price_data:
+                if date <= target_date:
+                    past_price = price
+                    break
+            
+            if past_price and past_price != 0:
                 change_percent = ((current_price - past_price) / past_price) * 100
                 performance[period] = round(change_percent, 2)
             else:
                 performance[period] = "N/A"
-
+        
+        return performance
+        
     except Exception as e:
         print(f"Could not retrieve performance data for {symbol}: {e}")
         return {"error": str(e)}
-
-    return performance
 
 def get_yahoo_movers(page='gainers'):
     """Scrapes Yahoo Finance for top gainers or losers."""

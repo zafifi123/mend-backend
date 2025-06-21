@@ -3,7 +3,6 @@ from api.core.db import get_conn
 from pydantic import BaseModel
 from api.models import UserStats
 from psycopg2.extras import RealDictCursor
-import yfinance as yf
 from api.core.cache import get_tickers_info
 
 router = APIRouter()
